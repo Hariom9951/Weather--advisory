@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weather Advisory</title>
+<meta name="description" content="Outdoor weather-safety answers, governed by written policies and checked against live forecasts.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b1730'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23f2c879'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body data-mood="idle">
+<div class="sky" aria-hidden="true">
+  <div class="stars"></div>
+  <div class="glow"></div>
+  <div class="cloud c1"></div>
+  <div class="cloud c2"></div>
+  <div class="cloud c3"></div>
+  <div class="grain"></div>
+</div>
+
+<div class="app">
+  <aside class="rail" id="rail" aria-label="Policies">
+    <div class="rail-head">
+      <p class="wordmark">Weather<br><em>Advisory</em></p>
+      <button class="icon-btn rail-close" id="railClose" type="button" aria-label="Close policy list">&times;</button>
+    </div>
+    <p class="rail-note">Every answer is read from one of these written rules. Open one to see exactly what it says.</p>
+    <nav id="policyList" class="policy-list" aria-live="polite"></nav>
+  </aside>
+
+  <main class="stage">
+    <header class="top">
+      <button class="ghost-btn" id="railOpen" type="button">Policies <span id="policyCount"></span></button>
+      <button class="ghost-btn" id="newSession" type="button">New conversation</button>
+    </header>
+
+    <section class="thread" id="thread" aria-live="polite" aria-label="Conversation">
+      <div class="hello" id="hello">
+        <p class="kicker">Outdoor weather, by the book</p>
+        <h1>Where are you headed, <em>and when?</em></h1>
+        <p class="lede">Ask about a ride, a trip, a picnic, the kids, the dog, grandma. I check live forecasts against our written policies and tell you which rule I applied. If no rule covers it, I say so.</p>
+        <ul class="starters" id="starters">
+          <li><button type="button">Is it safe to cycle in Bhopal today?</button></li>
+          <li><button type="button">Good day for a family picnic in Pune?</button></li>
+          <li><button type="button">Can my grandmother sit in the garden this afternoon in Jaipur?</button></li>
+          <li><button type="button">Should I walk the dog this evening in Chennai?</button></li>
+        </ul>
+      </div>
+    </section>
+
+    <form class="composer" id="composer" autocomplete="off">
+      <label for="q" class="sr-only">Your question</label>
+      <input id="q" name="q" type="text" maxlength="1000" placeholder="Ask about an outdoor plan" enterkeyhint="send">
+      <button type="submit" id="send" class="send" aria-label="Send question">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+      <p class="hint" aria-hidden="true"><kbd>/</kbd> to focus &nbsp; <kbd>Enter</kbd> to send</p>
+    </form>
+  </main>
+
+  <aside class="drawer" id="drawer" aria-hidden="true" aria-labelledby="drawerTitle" tabindex="-1">
+    <button class="icon-btn drawer-close" id="drawerClose" type="button" aria-label="Close policy">&times;</button>
+    <div id="drawerBody"></div>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
+</div>
+<script src="/app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+  - id: LEI-004
+    category: leisure
+    title: Muggy conditions for a long hike
+    severity: 1
+    rationale: >
+      Relative humidity of 85 percent or more makes sweat evaporate poorly, so long exertion feels much harder and heat
+      builds faster. Policy-owner judgment for the demo; tune with the owner.
+    applies_to: Hiking, trekking, a long nature walk or a trail run.
+    when: {metric: relative_humidity_2m, agg: max, window: auto, op: ">=", value: 85}
+    advice: >
+      The air is very humid, so a long hike will feel harder than the temperature suggests. Start early, carry extra water
+      and electrolytes, and plan more rest stops.

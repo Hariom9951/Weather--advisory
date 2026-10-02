@@ -1,0 +1,12 @@
+  - id: EXR-005
+    category: outdoor_exercise
+    title: Cold conditions for outdoor exercise
+    severity: 2
+    rationale: >
+      Feels-like at or below 5 C is where exposed skin and breathing start to suffer during hard exercise. Policy-owner
+      judgment for the demo; tune with the owner.
+    applies_to: Running, jogging, cycling or any exercise done outdoors in the cold.
+    when: {metric: apparent_temperature, agg: min, window: auto, op: "<=", value: 5}
+    advice: >
+      It is cold enough to be uncomfortable and risky for hard exercise. Dress in layers, cover hands and ears,
+      warm up indoors first, and shorten the session.

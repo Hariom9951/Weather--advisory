@@ -1,0 +1,309 @@
+# Standard Operating Procedures (SOPs) for the weather-advisory bot.
+#
+# Why this form: one declarative YAML file, because policy owners can read and diff it, it is validated at load time
+# (typos, unknown metrics, bad windows fail loudly), and changing a rule never requires touching the code that
+# fetches weather or calls the model.
+#
+# This file is the ONLY place advice lives. Edit it, run `python -m weather_bot.sops` to validate, restart/reload.
+# No Python changes are needed to add or alter an SOP.
+#
+# SOP fields
+#   id          CCC-NNN (3 capital letters, 3 digits). Cited verbatim in every answer.
+#   severity    0 favourable | 1 note | 2 caution | 3 warning (advise against) | 4 danger
+#   applies_to  Plain English. The question matcher reads this to decide whether a user's question is about
+#               this topic (paraphrases included). Describe the intent, not keywords.
+#   any_outdoor true = candidate for EVERY outdoor-activity question (use for hazards that touch all activities)
+#   lead        true = always presented before non-lead SOPs, regardless of severity
+#   supersedes  ids made redundant when both match (e.g. "very heavy" replaces "heavy")
+#   when        Condition tree. Leaf: metric (Open-Meteo hourly variable), agg (max|min|sum|mean|change),
+#               window (a name from `windows`, or auto = the time the user asked about), op, value,
+#               show (optional, default true; false = gating-only condition not quoted in the Data line).
+#               Groups: all: [...] / any: [...]. op `in_any` takes a list of values (e.g. WMO weather codes).
+#   rationale   Why the threshold is what it is: the standard it follows, or an explicit 'policy-owner judgment'. Optional for new
+#               SOPs, shown to users in the policy drawer, and required of the shipped ones by a test.
+#   advice      The only advice text the bot may give for this SOP.
+#
+# Resolution when several SOPs match: superseded SOPs are dropped; `lead` SOPs come first; then higher
+# severity; then id. The first is the primary answer, up to two more are listed as "also applies".
+
+windows:
+  now:       {label: "the current hour",            rolling_hours: 1,  user_selectable: true}
+  today:     {label: "the rest of the day",           rest_of_day: true, user_selectable: true}   # <3h left -> next 12h
+  morning:   {label: "the morning",                 start_hour: 6,  end_hour: 10, roll_if_past: true, user_selectable: true}
+  midday:    {label: "midday/afternoon",            start_hour: 11, end_hour: 16, roll_if_past: true, user_selectable: true}
+  evening:   {label: "the evening",                 start_hour: 17, end_hour: 21, roll_if_past: true, user_selectable: true}
+  tomorrow:  {label: "tomorrow",                    start_hour: 6,  end_hour: 22, day_offset: 1,      user_selectable: true}
+  next_24h:  {label: "the next 24 hours",           rolling_hours: 24}
+
+sops:
+  # ---- Regional hazards (touch every outdoor activity) -------------------------------------------------
+  - id: HAZ-001
+    category: regional_hazard
+    title: Heavy rainfall spell forecast
+    severity: 3
+    lead: true
+    any_outdoor: true
+    applies_to: Any outdoor activity, trip or plan, whatever the activity is.
+    rationale: >
+      Threshold is the lower bound of IMD's 'heavy' 24-hour rainfall category (64.5 mm, operational 
+      classification: heavy 64.5-115.5 mm). It uses the 24 h total, not any single hour, because a rain system can 
+      look unremarkable hour by hour. Marked lead + any_outdoor (policy-owner call) so the system is reported 
+      before any activity-specific advice.
+    when: {metric: precipitation, agg: sum, window: next_24h, op: ">=", value: 64.5}   # IMD "heavy" = 64.5-115.5 mm/24h
+    advice: >
+      A heavy-rainfall spell (IMD "heavy" category or above) is forecast for this location in the next 24 hours.
+      Treat every outdoor plan as high risk: postpone non-essential outdoor activity and travel, stay away from
+      waterlogged roads, underpasses, drains and riverbanks, and check official IMD or local-authority alerts
+      before going out.
+
+  - id: HAZ-002
+    category: regional_hazard
+    title: Very heavy rainfall spell forecast
+    severity: 4
+    lead: true
+    any_outdoor: true
+    supersedes: [HAZ-001]
+    applies_to: Any outdoor activity, trip or plan, whatever the activity is.
+    rationale: >
+      Threshold is the lower bound of IMD's 'very heavy' category as published in IMD's operational classification 
+      (115.6 mm; extremely heavy starts at 204.5 mm). Caveat: an older IMD glossary table puts 'very heavy' at 
+      124.5 mm. If the policy owner prefers that edition, change `value`; no code changes.
+    when: {metric: precipitation, agg: sum, window: next_24h, op: ">=", value: 115.6}  # IMD "very heavy" >= 115.6 mm/24h
+    advice: >
+      A very-heavy-rainfall spell (IMD "very heavy" category or above) is forecast for this location in the next
+      24 hours. Do not go out for outdoor activity or non-essential travel. Avoid flooded roads and low-lying
+      areas, keep emergency contacts and a charged phone ready, and follow official IMD and local-authority alerts.
+
+  - id: HAZ-003
+    category: regional_hazard
+    title: Thunderstorm forecast
+    severity: 3
+    any_outdoor: true
+    applies_to: Any outdoor activity, trip or plan, whatever the activity is.
+    rationale: >
+      WMO weather codes 95, 96 and 99 denote thunderstorm (the latter two with hail). Lightning has no safe low 
+      threshold, so any such hour in the window triggers: presence, not a number.
+    when: {metric: weather_code, window: auto, op: in_any, value: [95, 96, 99]}   # WMO: thunderstorm (+hail)
+    advice: >
+      Thunderstorms are forecast. Postpone outdoor activity until the storm has passed; if caught outside, move
+      indoors or into a vehicle and stay away from open ground, tall isolated trees and water.
+
+  # ---- Outdoor exercise --------------------------------------------------------------------------------
+  - id: EXR-001
+    category: outdoor_exercise
+    title: High UV during exercise
+    severity: 2
+    applies_to: Running, jogging, cycling, sport, gym-style workouts or any exercise done outdoors.
+    rationale: >
+      UV index 8 or more is the WHO 'very high' band (8-10). The 11:00-16:00 advice window is the usual peak-sun 
+      period (policy-owner judgment).
+    when: {metric: uv_index, agg: max, window: auto, op: ">=", value: 8}
+    advice: >
+      UV is very high. Avoid unprotected outdoor exercise in the strong-sun hours (roughly 11:00-16:00); if you
+      must go out, use sunscreen, a hat and sunglasses, or reschedule to early morning or evening.
+
+  - id: EXR-002
+    category: outdoor_exercise
+    title: Dangerous heat index for exercise
+    severity: 3
+    applies_to: Running, jogging, cycling, sport or any strenuous outdoor exercise or physical work.
+    rationale: >
+      Feels-like 38 C sits just under the 'danger' band of the NWS heat-index scale (extreme caution is roughly 
+      32-39/41 C and danger starts around 39-41 C; published sources differ by about 2 C), so it is deliberately 
+      conservative for strenuous exercise. Caveat: Open-Meteo's apparent_temperature is not the NWS heat index.
+    when: {metric: apparent_temperature, agg: max, window: auto, op: ">=", value: 38}
+    advice: >
+      The "feels-like" temperature is dangerously high. Avoid strenuous outdoor exercise during this period,
+      move it to early morning or indoors, drink water regularly and stop at the first sign of dizziness or cramps.
+
+  - id: EXR-003
+    category: outdoor_exercise
+    title: Strong gusts for cyclists and two-wheelers
+    severity: 3
+    applies_to: Cycling, biking, riding a motorbike, scooter, moped or any two-wheeler, including commuting by one.
+    rationale: >
+      Gusts of 45 km/h or more: Beaufort force 6 ('strong breeze') spans 39-49 km/h; 45 is a policy-owner judgment 
+      of where riders lose stability. Gusts, not mean wind, because gusts are what unbalance a rider.
+    when: {metric: wind_gusts_10m, agg: max, window: auto, op: ">=", value: 45}
+    advice: >
+      Wind gusts are strong enough to unbalance riders. This is a safety risk, not just a comfort issue: avoid
+      riding a bicycle or two-wheeler in this period, or use another mode of transport.
+
+  - id: EXR-004
+    category: outdoor_exercise
+    title: Wet roads for cyclists and two-wheelers
+    severity: 2
+    applies_to: Cycling, biking, riding a motorbike, scooter, moped or any two-wheeler, including commuting by one.
+    rationale: >
+      Either a 60% rain probability or 2 mm of accumulated rain is enough to make roads slippery. Probability 
+      alone can mislead (a likely drizzle), so either signal triggers. Policy-owner judgment.
+    when:
+      any:
+        - {metric: precipitation_probability, agg: max, window: auto, op: ">=", value: 60}
+        - {metric: precipitation, agg: sum, window: auto, op: ">=", value: 2}
+    advice: >
+      Rain is likely, so roads will be slippery and visibility reduced. If you ride, slow down, increase braking
+      distance, use lights and waterproofs, or choose a covered alternative.
+
+  # ---- Travel ------------------------------------------------------------------------------------------
+  - id: TRV-001
+    category: travel
+    title: Likely rain on a trip
+    severity: 2
+    applies_to: Travelling, commuting, driving, taking a train, bus, flight or a road trip.
+    rationale: >
+      A 70% precipitation probability is the usual 'likely' level; the effect is delay risk, so this is a caution, 
+      not a warning. Policy-owner judgment.
+    when: {metric: precipitation_probability, agg: max, window: auto, op: ">=", value: 70}
+    advice: >
+      Rain is likely along your travel window. Expect possible delays, allow extra time, and check for travel
+      alerts or service updates before departure.
+
+  - id: TRV-002
+    category: travel
+    title: Low visibility on the road
+    severity: 3
+    applies_to: Driving, riding or any road travel, including long road trips and commuting.
+    rationale: >
+      Visibility under 1000 m is the standard meteorological definition of fog. Metres are what Open-Meteo 
+      reports.
+    when: {metric: visibility, agg: min, window: auto, op: "<", value: 1000}   # metres
+    advice: >
+      Visibility is forecast to fall below 1 km (fog, mist or heavy rain). Delay road travel if you can; otherwise
+      drive slowly with dipped headlights and fog lamps, keep a long following distance, and avoid overtaking.
+
+  - id: TRV-003
+    category: travel
+    title: Strong gusts on the water or coast
+    severity: 3
+    applies_to: Boats, ferries, fishing, sailing, kayaking, or travel/activities at sea or on the coast.
+    rationale: >
+      Gusts of 50 km/h or more are above Beaufort force 6 (39-49 km/h), where small-craft and ferry disruption 
+      becomes likely. Policy-owner judgment.
+    when: {metric: wind_gusts_10m, agg: max, window: auto, op: ">=", value: 50}
+    advice: >
+      Squally winds are forecast. Do not go out in small boats, and expect ferry or coastal-service disruption;
+      confirm with the operator or port authority before departing.
+
+  # ---- Vulnerable groups -------------------------------------------------------------------------------
+  - id: VUL-001
+    category: vulnerable_groups
+    title: Heat risk for older adults
+    severity: 3
+    applies_to: An elderly or older person (grandparent, senior) spending time outdoors or going out.
+    rationale: >
+      Feels-like 35 C is inside the NWS 'extreme caution' range; it is lower than the general exercise threshold 
+      (EXR-002, 38 C) because older adults tolerate heat worse. Policy-owner judgment.
+    when: {metric: apparent_temperature, agg: max, window: auto, op: ">=", value: 35}
+    advice: >
+      The "feels-like" temperature is high enough to be risky for older adults. Keep them indoors or in shade
+      during the hottest hours, make sure they drink water often, and check on them regularly.
+
+  - id: VUL-002
+    category: vulnerable_groups
+    title: Rain or storm risk for children outdoors
+    severity: 2
+    applies_to: A child or children, kids, toddlers or a school group going to a park, playground or outdoors.
+    rationale: >
+      A 60% rain probability or any thunderstorm hour: children chill quickly and wet play areas are slippery; 
+      thunder uses the same WMO codes as HAZ-003. Policy-owner judgment.
+    when:
+      any:
+        - {metric: precipitation_probability, agg: max, window: auto, op: ">=", value: 60}
+        - {metric: weather_code, window: auto, op: in_any, value: [95, 96, 99]}
+    advice: >
+      Rain or storms are likely. Children get cold and wet quickly and wet play areas are slippery: postpone the
+      outing or choose an indoor alternative, and never shelter under trees during thunder.
+
+  - id: VUL-003
+    category: vulnerable_groups
+    title: Hot pavements for pets
+    severity: 2
+    applies_to: Walking or exercising a dog, cat or other pet outdoors.
+    rationale: >
+      Air temperature of 32 C or more. Pavement runs hotter than the air, so paws can burn at air temperatures 
+      well below pavement-burn levels. Uses air temperature, not feels-like. Policy-owner judgment.
+    when: {metric: temperature_2m, agg: max, window: auto, op: ">=", value: 32}
+    advice: >
+      It is hot enough that pavements can burn paws and pets overheat quickly. Walk in the early morning or after
+      sunset, carry water, and never leave a pet in a parked vehicle.
+
+  # ---- Leisure (fuzzy "is it a good day for ...?" questions) -------------------------------------------
+  - id: LEI-001
+    category: leisure
+    title: Pleasant conditions for a relaxed outing
+    severity: 0
+    applies_to: >
+      Open-ended "is it a nice/good day for ..." questions about relaxed leisure outdoors: a picnic, a walk in
+      the park, a barbecue, sitting outside, a day out. No safety threshold is implied by the question.
+      NOT for activities with their own hazards that this policy does not model (diving, swimming, sailing,
+      climbing, trekking, flying, motor sport): those have no leisure guidance here.
+    rationale: >
+      The fuzzy case. 'Is it a nice day for X?' has no single threshold, so the question is matched by meaning 
+      (the model never judges the weather) and the verdict is an explicit rubric: feels-like 18-32 C, rain chance 
+      under 30%, gusts under 30 km/h, UV under 8, and daylight in the window (so nobody is told night is 
+      pleasant). All five must hold.
+    when:
+      all:
+        - {metric: is_day, agg: max, window: auto, op: ">=", value: 1, show: false}  # some daylight in the window
+        - {metric: apparent_temperature, agg: min, window: auto, op: ">=", value: 18}
+        - {metric: apparent_temperature, agg: max, window: auto, op: "<=", value: 32}
+        - {metric: precipitation_probability, agg: max, window: auto, op: "<", value: 30}
+        - {metric: wind_gusts_10m, agg: max, window: auto, op: "<", value: 30}
+        - {metric: uv_index, agg: max, window: auto, op: "<", value: 8}
+    advice: >
+      Conditions look pleasant for a relaxed outing: comfortable temperatures, low chance of rain, light winds and
+      manageable UV. Enjoy it, and bring water and sun protection as a sensible habit.
+
+  - id: LEI-002
+    category: leisure
+    title: Poor conditions for a relaxed outing
+    severity: 2
+    supersedes: [LEI-003]
+    applies_to: >
+      Open-ended "is it a nice/good day for ..." questions about relaxed leisure outdoors: a picnic, a walk in
+      the park, a barbecue, sitting outside, a day out. No safety threshold is implied by the question.
+      NOT for activities with their own hazards that this policy does not model (diving, swimming, sailing,
+      climbing, trekking, flying, motor sport): those have no leisure guidance here.
+    rationale: >
+      Clearly poor: any one of a 50% rain chance, gusts of 35 km/h or more, feels-like 36 C or more or 10 C or 
+      less, or a thunderstorm. Supersedes LEI-003 when both match. Policy-owner judgment.
+    when:
+      any:
+        - {metric: precipitation_probability, agg: max, window: auto, op: ">=", value: 50}
+        - {metric: wind_gusts_10m, agg: max, window: auto, op: ">=", value: 35}
+        - {metric: apparent_temperature, agg: max, window: auto, op: ">=", value: 36}
+        - {metric: apparent_temperature, agg: min, window: auto, op: "<=", value: 10}
+        - {metric: weather_code, window: auto, op: in_any, value: [95, 96, 99]}
+    advice: >
+      This is not a good time for a relaxed outing: rain, strong winds, thunder or uncomfortable temperatures are
+      forecast. Pick another time window, or plan an indoor alternative.
+
+  # LEI-003 is the exact complement of LEI-001's comfort checks (any one outside its band), so a daytime window
+  # always gets LEI-001 or LEI-003; LEI-002 (clearly poor) supersedes LEI-003 when it also matches.
+  - id: LEI-003
+    category: leisure
+    title: Mixed conditions for a relaxed outing
+    severity: 1
+    applies_to: >
+      Open-ended "is it a nice/good day for ..." questions about relaxed leisure outdoors: a picnic, a walk in
+      the park, a barbecue, sitting outside, a day out. No safety threshold is implied by the question.
+      NOT for activities with their own hazards that this policy does not model (diving, swimming, sailing,
+      climbing, trekking, flying, motor sport): those have no leisure guidance here.
+    rationale: >
+      The exact complement of LEI-001's comfort checks (any one outside its band), so a daytime window always gets 
+      LEI-001 or LEI-003 and a fuzzy question never falls into a gap between 'good' and 'poor'. Found by testing 
+      live data (see docs/DECISIONS.md).
+    when:
+      all:
+        - {metric: is_day, agg: max, window: auto, op: ">=", value: 1, show: false}
+        - any:
+            - {metric: apparent_temperature, agg: min, window: auto, op: "<", value: 18}
+            - {metric: apparent_temperature, agg: max, window: auto, op: ">", value: 32}
+            - {metric: precipitation_probability, agg: max, window: auto, op: ">=", value: 30}
+            - {metric: wind_gusts_10m, agg: max, window: auto, op: ">=", value: 30}
+            - {metric: uv_index, agg: max, window: auto, op: ">=", value: 8}
+    advice: >
+      Conditions are mixed for a relaxed outing: at least one factor (warmth, chance of rain, wind or UV) is outside
+      the comfortable range. It can still work with care: choose the calmer, cooler part of the window, bring water,
+      shade and a rain layer, and have an indoor fallback.
