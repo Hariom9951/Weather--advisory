@@ -1,5 +1,7 @@
 # Weather-Advisory Support Bot
 
+> 🌐 **Live Demo:** [https://weather-advisory.onrender.com](https://weather-advisory.onrender.com/)
+
 A LangGraph chatbot that answers outdoor-activity safety questions ("is it safe to cycle today?", "should I take my
 kid to the park?", "good day for a picnic?") from **live Open-Meteo data** and **written SOPs**. The model never decides
 what advice is correct. It only (a) understands the question and (b) phrases an answer that code has already decided.
@@ -18,8 +20,9 @@ pip install -r requirements.txt
 cp .env.example .env              # then put your GEMINI_API_KEY in .env (git-ignored; never commit it)
 ```
 
-| What | Command |
+| What | Command / Link |
 |---|---|
+| Live Demo | [https://weather-advisory.onrender.com](https://weather-advisory.onrender.com/) |
 | Backend + frontend together (open http://localhost:8000) | `uvicorn server:app --port 8000` |
 | Offline tests (no key, no network) | `python -m pytest -q` |
 | Validate policies after editing | `python -m weather_bot.sops` |
